@@ -35,6 +35,18 @@ captures/
 # Intellij
 *.iml
 .idea/workspace.xml
+.idea/libraries
+
 
 # Keystore files
 *.jks
+foodrev
+/app/src/debug/res/values/google_maps_api.xml
+/app/src/main/res/values/test_phone_number.xml
+
+# Mac OS
+.DS_Store
+
+# MISC
+.externalNativeBuild
+
