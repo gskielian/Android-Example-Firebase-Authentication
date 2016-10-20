@@ -1,0 +1,1 @@
+place google_maps_api.xml in this folder
