@@ -40,6 +40,11 @@
             style="@style/ThemeOverlay.MyTextDetail"
             tools:text="Firebase User ID: 123456789abc" />
 
+        <TextView
+            android:id="@+id/current_gps"
+            style="@style/ThemeOverlay.MyTextDetail"
+            android:layout_height="wrap_content" />
+
     </LinearLayout>
 
 

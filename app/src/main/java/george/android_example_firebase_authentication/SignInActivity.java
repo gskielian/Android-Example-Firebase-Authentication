@@ -18,9 +18,12 @@ package george.android_example_firebase_authentication;
 
 import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.VisibleForTesting;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -42,6 +45,16 @@ import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+import com.google.android.gms.maps.model.LatLng;
+
+import george.android_example_firebase_authentication.CustomGeoFence.CustomGeoFences;
+import george.android_example_firebase_authentication.CustomGeoFence.GpsService;
+import george.android_example_firebase_authentication.CustomGeoFence.UserLocation;
 
 /**
  * Demonstrate Firebase Authentication using a Google ID Token.
@@ -49,6 +62,15 @@ import com.google.firebase.auth.GoogleAuthProvider;
 public class SignInActivity extends AppCompatActivity implements
         GoogleApiClient.OnConnectionFailedListener,
         View.OnClickListener {
+    private Intent stopGPSIntent;
+
+    // Get a reference to our posts
+    private FirebaseDatabase mFirebaseDatabase;
+    private DatabaseReference mDatabaseReference;
+
+    private static final int MULTIPLE_PERMISSIONS_REQUEST = 1;
+    private UserLocation mUserLocation;
+    private LatLng currentPosition;
 
     private static final String TAG = "GoogleActivity";
     private static final int RC_SIGN_IN = 9001;
@@ -64,6 +86,7 @@ public class SignInActivity extends AppCompatActivity implements
     private GoogleApiClient mGoogleApiClient;
     private TextView mStatusTextView;
     private TextView mDetailTextView;
+    private TextView mGpsTextView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,12 +96,14 @@ public class SignInActivity extends AppCompatActivity implements
         // Views
         mStatusTextView = (TextView) findViewById(R.id.status);
         mDetailTextView = (TextView) findViewById(R.id.detail);
+        mGpsTextView = (TextView) findViewById(R.id.current_gps);
 
         // Button listeners
         findViewById(R.id.sign_in_button).setOnClickListener(this);
         findViewById(R.id.sign_out_button).setOnClickListener(this);
         findViewById(R.id.disconnect_button).setOnClickListener(this);
 
+        stopGPSIntent = new Intent(this, GpsService.class);
         // [START config_signin]
         // Configure Google Sign In
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -104,14 +129,16 @@ public class SignInActivity extends AppCompatActivity implements
                 if (user != null) {
                     // User is signed in
                     Log.d(TAG, "onAuthStateChanged:signed_in:" + user.getUid());
+                    setupGpsWithPermission(user);
                 } else {
                     // User is signed out
+                    stopService(stopGPSIntent);
                     Log.d(TAG, "onAuthStateChanged:signed_out");
                 }
                 // [START_EXCLUDE]
                 updateUI(user);
                 // [END_EXCLUDE]
-            }
+           }
         };
         // [END auth_state_listener]
     }
@@ -278,4 +305,72 @@ public class SignInActivity extends AppCompatActivity implements
         }
     }
 
+    //new stuff
+
+    public void setupGpsWithPermission(FirebaseUser user) {
+
+        int hasSendGpsPermission = ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.ACCESS_FINE_LOCATION);
+        int hasSendSMSPermission = ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.SEND_SMS);
+        if (hasSendGpsPermission != PackageManager.PERMISSION_GRANTED || hasSendSMSPermission != PackageManager.PERMISSION_GRANTED ) {
+            String[] permissions = new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.SEND_SMS};
+            ActivityCompat.requestPermissions(this, permissions, MULTIPLE_PERMISSIONS_REQUEST);
+        } else {
+            attachFirebaseListener(user);
+            Intent i = new Intent(this, GpsService.class);
+            startService(i);
+        }
+
+    }
+
+
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
+
+        switch (requestCode) {
+            case MULTIPLE_PERMISSIONS_REQUEST:
+                if (grantResults.length == 2
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                        && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+
+                    Intent i = new Intent(this, GpsService.class);
+                    startService(i);
+                } else {
+
+                    // permission denied, boo! Disable the
+                    // functionality that depends on this permission.
+                }
+                break;
+            default:
+        }
+
+    }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Intent i = new Intent(this, GpsService.class);
+        stopService(i);
+    }
+
+    private void attachFirebaseListener(final FirebaseUser user) {
+        mFirebaseDatabase = FirebaseDatabase.getInstance();
+        mDatabaseReference = mFirebaseDatabase.getReference("users/gkielian");
+
+
+        // Attach a listener to read the data at our posts reference
+        mDatabaseReference.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                mUserLocation = dataSnapshot.getValue(UserLocation.class);
+                currentPosition = new LatLng(mUserLocation.getLatitude(), mUserLocation.getLongitude());
+                mGpsTextView.setText(user.getDisplayName() + " is at "  + currentPosition.toString());
+            }
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+                System.out.println("The read failed: " + databaseError.getCode());
+            }
+        });
+
+    }
 }
